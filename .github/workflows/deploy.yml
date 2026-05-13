@@ -1,0 +1,94 @@
+name: Deploy DevSecOps Portal
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # =========================================
+      # SSH INTO EC2 AND DEPLOY
+      # =========================================
+      - name: Deploy Application To EC2
+        uses: appleboy/ssh-action@v1.0.3
+
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.KEY }}
+          script: |
+
+            # =========================================
+            # UPDATE UBUNTU
+            # =========================================
+            sudo apt update -y
+
+            # =========================================
+            # INSTALL DOCKER
+            # =========================================
+            sudo apt install docker.io -y
+
+            # =========================================
+            # START DOCKER
+            # =========================================
+            sudo systemctl start docker
+
+            sudo systemctl enable docker
+
+            # =========================================
+            # GIVE DOCKER ACCESS
+            # =========================================
+            sudo usermod -aG docker ubuntu
+
+            # =========================================
+            # INSTALL DOCKER COMPOSE
+            # =========================================
+            sudo apt install docker-compose -y
+
+            # =========================================
+            # REMOVE OLD PROJECT
+            # =========================================
+            rm -rf DevSecOps-UI-Portal
+
+            # =========================================
+            # CLONE REPOSITORY
+            # =========================================
+            git clone https://github.com/SambhavSinghChouhan/DevSecOps-UI-Portal.git
+
+            cd DevSecOps-UI-Portal
+
+            # =========================================
+            # CREATE BACKEND ENV FILE
+            # =========================================
+            cat > backend/.env <<EOF
+            GB_TOKEN=${{ secrets.GB_TOKEN }}
+            OWNER=${{ secrets.OWNER }}
+            REPO=${{ secrets.REPO }}
+            PORT=5000
+            EOF
+
+            # =========================================
+            # CREATE FRONTEND ENV FILE
+            # =========================================
+            cat > frontend/.env.local <<EOF
+            NEXT_PUBLIC_API_URL=http://${{ secrets.EC2_HOST }}:5000
+            EOF
+
+            # =========================================
+            # STOP OLD CONTAINERS
+            # =========================================
+            sudo docker compose down || true
+
+            # =========================================
+            # BUILD AND START CONTAINERS
+            # =========================================
+            sudo docker compose up --build -d
+
+            # =========================================
+            # SHOW RUNNING CONTAINERS
+            # =========================================
+            sudo docker ps
