@@ -223,12 +223,12 @@ jobs:
             # =========================================
             # STOP OLD CONTAINERS
             # =========================================
-            sudo docker compose down || true
+            sudo docker-compose down || true
 
             # =========================================
             # BUILD AND START CONTAINERS
             # =========================================
-            sudo docker compose up --build -d
+            sudo docker-compose up --build -d
 
             # =========================================
             # SHOW RUNNING CONTAINERS
