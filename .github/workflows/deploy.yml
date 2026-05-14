@@ -57,6 +57,24 @@ jobs:
           terraform init
 
       # =========================================
+      # TERRAFORM VALIDATE
+      # =========================================
+      - name: Terraform Validate
+        working-directory: terraform
+
+        run: |
+          terraform validate
+
+      # =========================================
+      # TERRAFORM PLAN
+      # =========================================
+      - name: Terraform Plan
+        working-directory: terraform
+
+        run: |
+          terraform plan
+
+      # =========================================
       # TERRAFORM APPLY
       # =========================================
       - name: Terraform Apply
@@ -97,7 +115,9 @@ jobs:
 
           git config --global user.email "github-actions@github.com"
 
-          git add terraform/terraform.tfstate terraform/terraform.tfstate.backup || true
+          git add terraform/terraform.tfstate || true
+
+          git add terraform/terraform.tfstate.backup || true
 
           git commit -m "Updated Terraform State File" || echo "No Changes"
 
@@ -113,6 +133,8 @@ jobs:
 
         run: |
           terraform destroy -auto-approve
+
+
 
   deploy:
     needs: terraform
