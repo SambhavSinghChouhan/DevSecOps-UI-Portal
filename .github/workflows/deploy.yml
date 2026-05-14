@@ -1,25 +1,141 @@
-name: Deploy DevSecOps Portal
+name: Terraform + Deploy DevSecOps Portal
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose Action"
+        required: true
+        type: choice
+        options:
+          - apply
+          - destroy
+
+permissions:
+  id-token: write
+  contents: write
 
 jobs:
 
+  terraform:
+    runs-on: ubuntu-latest
+
+    outputs:
+      ec2_ip: ${{ steps.tf.outputs.ec2_ip }}
+
+    steps:
+
+      # =========================================
+      # CHECKOUT CODE
+      # =========================================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # =========================================
+      # CONFIGURE AWS OIDC
+      # =========================================
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+
+        with:
+          role-to-assume: ${{ secrets.OIDC }}
+          aws-region: ap-south-1
+
+      # =========================================
+      # SETUP TERRAFORM
+      # =========================================
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # =========================================
+      # TERRAFORM INIT
+      # =========================================
+      - name: Terraform Init
+        run: terraform init
+
+      # =========================================
+      # TERRAFORM APPLY
+      # =========================================
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'apply' }}
+
+        id: tf
+
+        run: |
+          terraform apply -auto-approve
+
+          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+
+
+      # =========================================
+      # GET EC2 PUBLIC IP
+      # =========================================
+      - name: Get EC2 Public IP
+        if: ${{ github.event.inputs.action == 'apply' }}
+
+        id: ec2
+
+        run: |
+
+          EC2_IP=$(terraform output -raw ec2_public_ip)
+
+          echo "EC2 Public IP: $EC2_IP"
+
+          echo "ec2_ip=$EC2_IP" >> $GITHUB_OUTPUT
+
+      # =========================================
+      # SAVE TERRAFORM STATE FILE
+      # =========================================
+      - name: Commit Terraform State
+        if: ${{ github.event.inputs.action == 'apply' }}
+
+        run: |
+
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          git add terraform.tfstate terraform.tfstate.backup || true
+
+          git commit -m "Updated Terraform State File" || echo "No Changes"
+
+          git push
+          
+
+      # =========================================
+      # TERRAFORM DESTROY
+      # =========================================
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+
+        run: |
+          terraform destroy -auto-approve
+
   deploy:
+    needs: terraform
+
+    if: ${{ github.event.inputs.action == 'apply' }}
+
     runs-on: ubuntu-latest
 
     steps:
 
       # =========================================
-      # SSH INTO EC2 AND DEPLOY
+      # WAIT FOR EC2
+      # =========================================
+      - name: Wait For EC2
+        run: sleep 60
+
+      # =========================================
+      # DEPLOY APPLICATION
       # =========================================
       - name: Deploy Application To EC2
         uses: appleboy/ssh-action@v1.0.3
 
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ needs.terraform.outputs.ec2_ip }}
           username: ubuntu
           key: ${{ secrets.KEY }}
+
           script: |
 
             # =========================================
@@ -75,7 +191,7 @@ jobs:
             # CREATE FRONTEND ENV FILE
             # =========================================
             cat > frontend/.env.local <<EOF
-            NEXT_PUBLIC_API_URL=http://${{ secrets.EC2_HOST }}:5000
+            NEXT_PUBLIC_API_URL=http://${{ needs.terraform.outputs.ec2_ip }}:5000
             EOF
 
             # =========================================
