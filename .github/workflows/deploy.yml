@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      ec2_ip: ${{ steps.tf.outputs.ec2_ip }}
+      ec2_ip: ${{ steps.ec2.outputs.ec2_ip }}
 
     steps:
 
@@ -51,7 +51,10 @@ jobs:
       # TERRAFORM INIT
       # =========================================
       - name: Terraform Init
-        run: terraform init
+        working-directory: terraform
+
+        run: |
+          terraform init
 
       # =========================================
       # TERRAFORM APPLY
@@ -59,13 +62,10 @@ jobs:
       - name: Terraform Apply
         if: ${{ github.event.inputs.action == 'apply' }}
 
-        id: tf
+        working-directory: terraform
 
         run: |
           terraform apply -auto-approve
-
-          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
-
 
       # =========================================
       # GET EC2 PUBLIC IP
@@ -74,6 +74,8 @@ jobs:
         if: ${{ github.event.inputs.action == 'apply' }}
 
         id: ec2
+
+        working-directory: terraform
 
         run: |
 
@@ -92,20 +94,22 @@ jobs:
         run: |
 
           git config --global user.name "github-actions"
+
           git config --global user.email "github-actions@github.com"
 
-          git add terraform.tfstate terraform.tfstate.backup || true
+          git add terraform/terraform.tfstate terraform/terraform.tfstate.backup || true
 
           git commit -m "Updated Terraform State File" || echo "No Changes"
 
           git push
-          
 
       # =========================================
       # TERRAFORM DESTROY
       # =========================================
       - name: Terraform Destroy
         if: ${{ github.event.inputs.action == 'destroy' }}
+
+        working-directory: terraform
 
         run: |
           terraform destroy -auto-approve
